@@ -1,0 +1,13 @@
+[project]
+name = "telegram2notion"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "notion-client>=2.7.0",
+    "openai>=2.11.0",
+    "python-dotenv>=1.2.1",
+    "python-telegram-bot>=22.5",
+    "ultimate-notion>=0.9.4",
+]

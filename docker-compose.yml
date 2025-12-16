@@ -1,0 +1,7 @@
+services:
+  telegram2notion:
+    build: .
+    container_name: telegram2notion
+    restart: unless-stopped
+    env_file:
+      - .env
