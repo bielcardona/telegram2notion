@@ -34,6 +34,20 @@ last_page_id = None
 
 DELTA_TIME = 10  # segons
 
+from openai import AsyncOpenAI
+
+openai_client = AsyncOpenAI()
+
+async def transcribe_audio(audio_file):
+    audio_file.seek(0)
+    transcript = await openai_client.audio.transcriptions.create(
+        model="gpt-4o-transcribe",
+        file=audio_file,
+        response_format="text",
+        language="ca"  # o "es" / "en"
+    )
+    return transcript
+
 def page_block(title_field, title):
     return {
         title_field: {
@@ -63,17 +77,23 @@ def paragraph_block(text):
         }
     }
 
-def image_block(upload_id):
+def file_block(kind,upload_id):
+    if kind not in ['file', 'image', 'pdf', 'audio', 'video']:
+        return paragraph_block('file kind not supported')
+
     return {
         "object": "block",
-        "type": "image",
-        "image": {
+        "type": kind,
+        kind: {
             "type": "file_upload",
             "file_upload": {
                 "id": upload_id
             }
         }
     }
+
+def image_block(upload_id):
+    return file_block("image",upload_id)
 
 async def create_page_with_title(title: str):
     new_page = notion.pages.create(
@@ -91,6 +111,57 @@ async def add_image_to_page(page_id: str, image_file):
     notion.file_uploads.send(file_upload_id=upload_id, file=image_file)
     notion.blocks.children.append(block_id=page_id,children=[image_block(upload_id)])
 
+# --- Message Type Handlers ---
+async def handle_text_message(message, page_id):
+    text = message.text
+    await add_text_to_page(page_id, text)
+
+
+async def handle_photo_message(message, context, page_id):
+    photo = message.photo[-1]
+    telegram_file = await context.bot.get_file(photo.file_id)
+    image_bytes = await telegram_file.download_as_bytearray()
+
+    from io import BytesIO
+    image_file = BytesIO(image_bytes)
+    image_file.name = "photo.jpg"
+
+    await add_image_to_page(page_id, image_file)
+
+
+async def handle_voice_message(message, context, page_id):
+    voice = message.voice
+    telegram_file = await context.bot.get_file(voice.file_id)
+
+    audio_bytes = await telegram_file.download_as_bytearray()
+
+    from io import BytesIO
+    audio_file = BytesIO(audio_bytes)
+    audio_file.name = "voice.ogg"
+
+    try:
+        transcription = await transcribe_audio(audio_file)
+    except Exception as e:
+        transcription = f"[Error transcrivint àudio: {e}]"
+
+    await add_text_to_page(
+        page_id,
+        f"🎤: {transcription}"
+    )
+
+
+async def handle_video_message(message, context, page_id):
+    pass  # TODO
+
+
+async def handle_audio_message(message, context, page_id):
+    pass  # TODO
+
+
+async def handle_document_message(message, context, page_id):
+    pass  # TODO
+
+
 # --- Handler ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(update)
@@ -107,73 +178,37 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message = update.message
 
-    # --- Tipus de missatge ---
-    if message.text:
-        message_type = "text"
-
-    elif message.photo:
-        message_type = "photo"
-
-    elif message.video:
-        message_type = "video"
-
-    elif message.voice:
-        message_type = "voice"
-
-    elif message.audio:
-        message_type = "audio"
-
-    elif message.document:
-        message_type = "document"
-
-    else:
-        message_type = "unknown"
-
     if last_page_id is None or now - last_run >= DELTA_TIME:
         page = await create_page_with_title(message.text if message.text else "Nou missatge")
         last_page_id = page['id']
 
-    # --- Processament segons tipus ---
-    if message_type == "text":
-        # TODO: processar text
-        text = message.text
-        await add_text_to_page(last_page_id, text)
+    # --- Tipus de missatge ---
+    if message.text:
+        await handle_text_message(message, last_page_id)
+        message_type = "text"
 
-    elif message_type == "photo":
-        # Agafam la foto amb més resolució
-        photo = message.photo[-1]
+    elif message.photo:
+        await handle_photo_message(message, context, last_page_id)
+        message_type = "photo"
 
-        # Recuperam el fitxer de Telegram
-        telegram_file = await context.bot.get_file(photo.file_id)
+    elif message.voice:
+        await handle_voice_message(message, context, last_page_id)
+        message_type = "voice"
 
-        # Descarregam la imatge en memòria
-        image_bytes = await telegram_file.download_as_bytearray()
+    elif message.video:
+        await handle_video_message(message, context, last_page_id)
+        message_type = "video"
 
-        from io import BytesIO
-        image_file = BytesIO(image_bytes)
-        image_file.name = "photo.jpg"  # Notion necessita un nom de fitxer
+    elif message.audio:
+        await handle_audio_message(message, context, last_page_id)
+        message_type = "audio"
 
-        # Pujam la imatge a Notion
-        await add_image_to_page(last_page_id, image_file)
-
-    elif message_type == "video":
-        # TODO: descarregar i pujar el vídeo a Notion
-        pass
-
-    elif message_type == "voice":
-        # TODO: transcriure àudio (voice) i afegir-lo a Notion
-        pass
-
-    elif message_type == "audio":
-        # TODO: tractar àudio llarg
-        pass
-
-    elif message_type == "document":
-        # TODO: pujar document adjunt a Notion
-        pass
+    elif message.document:
+        await handle_document_message(message, context, last_page_id)
+        message_type = "document"
 
     else:
-        # TODO: gestionar missatges no suportats
+        message_type = "unknown"
         print("Tipus de missatge no suportat")
 
     print(f"[Notion] {user}: {message_type}")
