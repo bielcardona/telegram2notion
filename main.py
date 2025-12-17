@@ -159,7 +159,25 @@ async def handle_audio_message(message, context, page_id):
 
 
 async def handle_document_message(message, context, page_id):
-    pass  # TODO
+    document = message.document
+    # Només tractam PDFs
+    if document.mime_type != "application/pdf":
+        await add_text_to_page(
+            page_id,
+            f"📎 Document no suportat: {document.file_name} ({document.mime_type})"
+        )
+    # Obtenir el fitxer de Telegram
+    telegram_file = await context.bot.get_file(document.file_id)
+    # Descarregar en memòria
+    file_bytes = await telegram_file.download_as_bytearray()
+    from io import BytesIO
+    pdf_file = BytesIO(file_bytes)
+    pdf_file.name = document.file_name or "document.pdf"
+    # Afegir el bloc PDF a la pàgina
+    notion.blocks.children.append(
+        block_id=page_id,
+        children=[file_block("pdf", upload_id)]
+    )
 
 
 # --- Handler ---
