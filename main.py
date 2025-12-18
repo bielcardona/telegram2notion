@@ -20,11 +20,9 @@ import time
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
 NOTION_DATABASE_ID = os.environ["NOTION_DATABASE_ID"]
-NOTION_PAGE_ID = os.environ["NOTION_PAGE_ID"]
+MAIN_FIELD_NAME = os.environ.get("MAIN_FIELD_NAME", "Name")
 
 notion = Client(auth=NOTION_TOKEN)
-# Recuperam la pàgina una sola vegada
-## page = notion.get_page(NOTION_PAGE_ID)
 
 database = notion.databases.retrieve(NOTION_DATABASE_ID)
 NOTION_DATA_SOURCE_ID = database['data_sources'][0]['id']
@@ -98,7 +96,7 @@ def image_block(upload_id):
 async def create_page_with_title(title: str):
     new_page = notion.pages.create(
         parent={"data_source_id": NOTION_DATA_SOURCE_ID},
-        properties=page_block("Name", title),
+        properties=page_block(MAIN_FIELD_NAME, title),
     )
     return new_page
 
