@@ -128,24 +128,24 @@ async def handle_photo_message(message, context, page_id):
 
 
 async def handle_voice_message(message, context, page_id):
-    voice = message.voice
-    telegram_file = await context.bot.get_file(voice.file_id)
-
-    audio_bytes = await telegram_file.download_as_bytearray()
-
-    from io import BytesIO
-    audio_file = BytesIO(audio_bytes)
-    audio_file.name = "voice.ogg"
-
-    try:
-        transcription = await transcribe_audio(audio_file)
-    except Exception as e:
-        transcription = f"[Error transcrivint àudio: {e}]"
-
+    transcription = get_text_from_voice_message(message, context)
     await add_text_to_page(
         page_id,
         f"🎤: {transcription}"
     )
+
+async def get_text_from_voice_message(message, context):
+    voice = message.voice
+    telegram_file = await context.bot.get_file(voice.file_id)
+    audio_bytes = await telegram_file.download_as_bytearray()
+    from io import BytesIO
+    audio_file = BytesIO(audio_bytes)
+    audio_file.name="voice.ogg"
+    try:
+        transcription = await transcribe_audio(audio_file)
+    except Exception as e:
+        transcription = f"[Error transcrivint àudio: {e}]"
+    return transcription
 
 
 async def handle_video_message(message, context, page_id):
@@ -172,6 +172,9 @@ async def handle_document_message(message, context, page_id):
     pdf_file = BytesIO(file_bytes)
     pdf_file.name = document.file_name or "document.pdf"
     # Afegir el bloc PDF a la pàgina
+    upload = notion.file_uploads.create()
+    upload_id = upload['id']
+    notion.file_uploads.send(file_upload_id=upload_id, file=pdf_file)
     notion.blocks.children.append(
         block_id=page_id,
         children=[file_block("pdf", upload_id)]
@@ -194,13 +197,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message = update.message
 
+    new_page = False
     if last_page_id is None or now - last_run >= DELTA_TIME:
-        page = await create_page_with_title(message.text if message.text else "Nou missatge")
+        new_page = True
+        if message.text:
+            title = message.text
+        elif message.voice:
+            title = get_text_from_voice_message(message, context)
+        else:
+            title = "Nou missatge"
+        page = await create_page_with_title(title)
         last_page_id = page['id']
 
     # --- Tipus de missatge ---
     if message.text:
-        await handle_text_message(message, last_page_id)
+        if not new_page:
+            await handle_text_message(message, last_page_id)
         message_type = "text"
 
     elif message.photo:
@@ -208,8 +220,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message_type = "photo"
 
     elif message.voice:
-        await handle_voice_message(message, context, last_page_id)
-        message_type = "voice"
+        if not new_page:
+            await handle_voice_message(message, context, last_page_id)
+            message_type = "voice"
 
     elif message.video:
         await handle_video_message(message, context, last_page_id)
