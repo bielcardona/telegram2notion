@@ -128,7 +128,7 @@ async def handle_photo_message(message, context, page_id):
 
 
 async def handle_voice_message(message, context, page_id):
-    transcription = get_text_from_voice_message(message, context)
+    transcription = await get_text_from_voice_message(message, context)
     await add_text_to_page(
         page_id,
         f"🎤: {transcription}"
@@ -164,6 +164,7 @@ async def handle_document_message(message, context, page_id):
             page_id,
             f"📎 Document no suportat: {document.file_name} ({document.mime_type})"
         )
+        return
     # Obtenir el fitxer de Telegram
     telegram_file = await context.bot.get_file(document.file_id)
     # Descarregar en memòria
@@ -203,7 +204,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if message.text:
             title = message.text
         elif message.voice:
-            title = get_text_from_voice_message(message, context)
+            title = await get_text_from_voice_message(message, context)
         else:
             title = "Nou missatge"
         page = await create_page_with_title(title)
