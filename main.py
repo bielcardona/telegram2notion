@@ -223,7 +223,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif message.voice:
         if not new_page:
             await handle_voice_message(message, context, last_page_id)
-            message_type = "voice"
+        message_type = "voice"
 
     elif message.video:
         await handle_video_message(message, context, last_page_id)
